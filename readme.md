@@ -42,11 +42,14 @@ The system follows a modular pipeline architecture:
 git clone <repository-url>
 cd docling
 
-# Install the package in development mode
-pip install -e .
+# Install dependencies with uv
+uv sync
 
-# Install additional dependencies for PDF processing and embeddings
-pip install langchain langchain-openai openai chromadb
+# For development with additional tools
+uv sync --extra dev
+
+# For all optional dependencies  
+uv sync --all-extras
 ```
 
 Set up environment variables by creating a `.env` file:

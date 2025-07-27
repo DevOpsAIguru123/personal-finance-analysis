@@ -1,15 +1,84 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "docling-rag"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-#requires-python = ">=3.11"
+description = "Document processing and RAG system using Docling, LangChain, and ChromaDB"
+readme = "readme.md"
+requires-python = ">=3.9,<3.13"
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+license = {text = "MIT"}
+keywords = ["document-processing", "rag", "embeddings", "pdf", "langchain", "chromadb"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
 dependencies = [
-    "chromadb>=1.0.15",
-    "filetype>=1.2.0",
+    "docling",
     "langchain>=0.3.26",
     "langchain-openai>=0.3.28",
+    "langchain-community>=0.0.20",
     "openai>=1.97.0",
+    "chromadb>=1.0.15",
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+    "pydantic>=2.0.0",
+    "tiktoken>=0.5.0",
     "python-dotenv>=1.1.1",
+    "filetype>=1.2.0",
+    "pypdf>=3.0.0",
+    "pymupdf>=1.23.0",
 ]
-requires-python = ">=3.9,<3.13"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+all = [
+    "docling-rag[dev]",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/docling-rag"
+Repository = "https://github.com/yourusername/docling-rag"
+Issues = "https://github.com/yourusername/docling-rag/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["scripts*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

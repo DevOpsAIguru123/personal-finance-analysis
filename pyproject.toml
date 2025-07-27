@@ -7,7 +7,7 @@ name = "docling-rag"
 version = "0.1.0"
 description = "Document processing and RAG system using Docling, LangChain, and ChromaDB"
 readme = "readme.md"
-requires-python = ">=3.9,<3.13"
+requires-python = ">=3.11,<3.12"
 authors = [
     {name = "Your Name", email = "your.email@example.com"}
 ]
@@ -25,7 +25,6 @@ classifiers = [
 ]
 
 dependencies = [
-    "docling",
     "langchain>=0.3.26",
     "langchain-openai>=0.3.28",
     "langchain-community>=0.0.20",
@@ -82,3 +81,10 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+# Note: docling and torch dependencies removed from main dependencies due to platform compatibility issues
+# For macOS x86_64, install separately:
+# uv pip install docling --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+# 
+# For other platforms, install normally:
+# uv pip install docling torch torchvision

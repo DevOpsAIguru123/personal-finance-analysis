@@ -208,7 +208,7 @@ def main():
     parser.add_argument("--input", required=True, help="Input directory containing chunk files")
     parser.add_argument("--db-path", required=True, help="ChromaDB database path")
     parser.add_argument("--collection-name", default="documents", help="ChromaDB collection name")
-    parser.add_argument("--provider", choices=["openai", "ollama"], help="Embedding provider (openai or ollama)")
+    parser.add_argument("--provider", choices=["openai", "azure_openai", "ollama"], help="Embedding provider (openai, azure_openai, or ollama)")
     parser.add_argument("--model", help="Embedding model name")
     
     args = parser.parse_args()
@@ -219,6 +219,9 @@ def main():
     # Check required API keys based on provider
     if provider == "openai" and not os.getenv("OPENAI_API_KEY"):
         print("Error: OPENAI_API_KEY environment variable not set for OpenAI provider")
+        sys.exit(1)
+    elif provider == "azure_openai" and not os.getenv("AZURE_OPENAI_API_KEY"):
+        print("Error: AZURE_OPENAI_API_KEY environment variable not set for Azure OpenAI provider")
         sys.exit(1)
     
     process_chunks_directory(

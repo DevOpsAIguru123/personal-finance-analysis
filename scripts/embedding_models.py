@@ -8,7 +8,7 @@ import os
 import requests
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
-from openai import OpenAI
+from openai import OpenAI, AzureOpenAI
 
 
 class EmbeddingModel(ABC):
@@ -148,6 +148,67 @@ class OllamaEmbeddingModel(EmbeddingModel):
         return embeddings
 
 
+class AzureOpenAIEmbeddingModel(EmbeddingModel):
+    """Azure OpenAI embedding model implementation."""
+    
+    def __init__(self):
+        """Initialize the Azure OpenAI embedding model."""
+        self.model = os.getenv("AZURE_OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+        self.deployment = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", self.model)
+        self.endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+        self.api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-01")
+        api_key = os.getenv("AZURE_OPENAI_API_KEY")
+        
+        if not self.endpoint:
+            raise ValueError("Azure OpenAI endpoint not found. Set AZURE_OPENAI_ENDPOINT environment variable.")
+        if not api_key:
+            raise ValueError("Azure OpenAI API key not found. Set AZURE_OPENAI_API_KEY environment variable.")
+            
+        self.client = AzureOpenAI(
+            api_key=api_key,
+            azure_endpoint=self.endpoint,
+            api_version=self.api_version
+        )
+    
+    @property
+    def model_name(self) -> str:
+        return f"azure_openai:{self.deployment}"
+    
+    def generate_embedding(self, text: str) -> List[float]:
+        """Generate embedding for a single text."""
+        try:
+            response = self.client.embeddings.create(
+                model=self.deployment,
+                input=text
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            print(f"Error generating Azure OpenAI embedding: {str(e)}")
+            return []
+    
+    def generate_embeddings_batch(self, texts: List[str], batch_size: int = 100) -> List[List[float]]:
+        """Generate embeddings for multiple texts in batches."""
+        embeddings = []
+        
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            print(f"Processing Azure OpenAI batch {i//batch_size + 1}/{(len(texts) + batch_size - 1)//batch_size}")
+            
+            try:
+                response = self.client.embeddings.create(
+                    model=self.deployment,
+                    input=batch
+                )
+                batch_embeddings = [data.embedding for data in response.data]
+                embeddings.extend(batch_embeddings)
+            except Exception as e:
+                print(f"Error processing Azure OpenAI batch: {str(e)}")
+                # Add empty embeddings for failed batch
+                embeddings.extend([[] for _ in batch])
+        
+        return embeddings
+
+
 def create_embedding_model(
     provider: str = None,
     model: str = None,
@@ -168,6 +229,9 @@ def create_embedding_model(
             api_key=api_key
         )
     
+    elif provider.lower() == "azure_openai":
+        return AzureOpenAIEmbeddingModel()
+    
     elif provider.lower() == "ollama":
         if model is None:
             model = os.getenv("OLLAMA_EMBEDDING_MODEL", "jina/jina-embeddings-v2-base-en")
@@ -179,7 +243,7 @@ def create_embedding_model(
         )
     
     else:
-        raise ValueError(f"Unsupported embedding provider: {provider}. Supported: 'openai', 'ollama'")
+        raise ValueError(f"Unsupported embedding provider: {provider}. Supported: 'openai', 'azure_openai', 'ollama'")
 
 
 def get_available_ollama_models(base_url: str = None) -> List[str]:
@@ -207,6 +271,11 @@ def list_embedding_models() -> Dict[str, List[str]]:
             "text-embedding-ada-002",
             "text-embedding-3-small",
             "text-embedding-3-large"
+        ],
+        "azure_openai": [
+            "text-embedding-3-small",
+            "text-embedding-3-large",
+            "text-embedding-ada-002"
         ],
         "ollama": get_available_ollama_models()
     }

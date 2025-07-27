@@ -17,7 +17,7 @@ load_dotenv()
 import chromadb
 from chromadb.config import Settings
 from chromadb.utils import embedding_functions
-from openai import OpenAI
+from openai import OpenAI, AzureOpenAI
 
 # Import our custom embedding models
 from embedding_models import create_embedding_model
@@ -28,16 +28,33 @@ class RAGSystem:
         self, 
         db_path: str, 
         collection_name: str = "documents",
-        openai_model: str = "gpt-4",
+        chat_model: str = "gpt-4",
         api_key: str = None,
-        embedding_provider: str = None
+        embedding_provider: str = None,
+        chat_provider: str = None
     ):
         """Initialize the RAG system."""
-        self.openai_model = openai_model
-        self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
+        self.chat_model = chat_model
+        chat_provider = chat_provider or os.getenv("CHAT_PROVIDER", "openai")
         
-        if not self.client.api_key:
-            raise ValueError("OpenAI API key not found. Set OPENAI_API_KEY environment variable.")
+        # Initialize chat client based on provider
+        if chat_provider == "azure_openai":
+            endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+            api_version = os.getenv("AZURE_OPENAI_CHAT_API_VERSION", "2024-12-01-preview")
+            if not endpoint:
+                raise ValueError("Azure OpenAI endpoint not found. Set AZURE_OPENAI_ENDPOINT environment variable.")
+            
+            self.client = AzureOpenAI(
+                api_key=api_key or os.getenv("AZURE_OPENAI_API_KEY"),
+                endpoint=endpoint,
+                api_version=api_version
+            )
+            if not self.client.api_key:
+                raise ValueError("Azure OpenAI API key not found. Set AZURE_OPENAI_API_KEY environment variable.")
+        else:
+            self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
+            if not self.client.api_key:
+                raise ValueError("OpenAI API key not found. Set OPENAI_API_KEY environment variable.")
         
         # Get embedding provider from environment if not specified
         embedding_provider = embedding_provider or os.getenv("EMBEDDING_PROVIDER", "openai")
@@ -136,7 +153,7 @@ Please provide a comprehensive answer based on the context documents above."""
         
         try:
             response = self.client.chat.completions.create(
-                model=self.openai_model,
+                model=self.chat_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -215,7 +232,8 @@ def main():
     parser.add_argument("--max-tokens", type=int, default=500, help="Maximum tokens for response")
     parser.add_argument("--n-results", type=int, default=5, help="Number of relevant documents to retrieve")
     parser.add_argument("--no-sources", action="store_true", help="Don't show source documents")
-    parser.add_argument("--embedding-provider", choices=["openai", "ollama"], help="Embedding provider (openai or ollama)")
+    parser.add_argument("--embedding-provider", choices=["openai", "azure_openai", "ollama"], help="Embedding provider (openai, azure_openai, or ollama)")
+    parser.add_argument("--chat-provider", choices=["openai", "azure_openai"], help="Chat provider (openai or azure_openai)")
     
     args = parser.parse_args()
     
@@ -229,8 +247,9 @@ def main():
         rag = RAGSystem(
             db_path=args.db_path,
             collection_name=args.collection_name,
-            openai_model=args.model,
-            embedding_provider=args.embedding_provider
+            chat_model=args.model,
+            embedding_provider=args.embedding_provider,
+            chat_provider=args.chat_provider
         )
         
         # Perform query

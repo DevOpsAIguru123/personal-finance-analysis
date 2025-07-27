@@ -17,7 +17,7 @@ import requests
 load_dotenv()
 from chromadb.config import Settings
 from chromadb.utils import embedding_functions
-from openai import OpenAI
+from openai import OpenAI, AzureOpenAI
 
 # Import our custom embedding models
 from embedding_models import create_embedding_model
@@ -42,11 +42,25 @@ class InteractiveRAG:
             self.openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             if not self.openai_client.api_key:
                 raise ValueError("OpenAI API key not found. Set OPENAI_API_KEY environment variable.")
+        elif self.chat_provider == "azure_openai":
+            self.chat_model = os.getenv("AZURE_OPENAI_CHAT_MODEL", "gpt-4.1-mini")
+            endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+            api_version = os.getenv("AZURE_OPENAI_CHAT_API_VERSION", "2024-12-01-preview")
+            if not endpoint:
+                raise ValueError("Azure OpenAI endpoint not found. Set AZURE_OPENAI_ENDPOINT environment variable.")
+            
+            self.openai_client = AzureOpenAI(
+                api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+                azure_endpoint=endpoint,
+                api_version=api_version
+            )
+            if not self.openai_client.api_key:
+                raise ValueError("Azure OpenAI API key not found. Set AZURE_OPENAI_API_KEY environment variable.")
         elif self.chat_provider == "ollama":
             self.chat_model = os.getenv("OLLAMA_CHAT_MODEL", "phi4-mini")
             self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip('/')
         else:
-            raise ValueError(f"Unsupported chat provider: {self.chat_provider}. Supported: 'openai', 'ollama'")
+            raise ValueError(f"Unsupported chat provider: {self.chat_provider}. Supported: 'openai', 'azure_openai', 'ollama'")
         
         # Initialize ChromaDB
         try:
@@ -143,7 +157,7 @@ Current Question: {query}
 Please provide a helpful answer based on the context documents above."""
         
         try:
-            if self.chat_provider == "openai":
+            if self.chat_provider == "openai" or self.chat_provider == "azure_openai":
                 response = self.openai_client.chat.completions.create(
                     model=self.chat_model,
                     messages=[

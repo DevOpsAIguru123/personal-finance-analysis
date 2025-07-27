@@ -11,7 +11,7 @@ A comprehensive document processing pipeline built with Docling that converts PD
 - **Vector Embeddings:** Generate embeddings using OpenAI or Ollama models.
 - **Vector Storage:** Persistent storage with ChromaDB for efficient similarity search.
 - **AI Chat Interface:** Interactive chat with your documents using Retrieval-Augmented Generation (RAG).
-- **Multiple Embedding Providers:** Support for OpenAI and Ollama embedding models.
+- **Multiple Embedding Providers:** Support for OpenAI, Azure OpenAI, and Ollama embedding models.
 
 ---
 
@@ -32,7 +32,7 @@ The system follows a modular pipeline architecture:
 ### Prerequisites
 
 - Python 3.9+ (< 3.13)
-- OpenAI API key (for OpenAI embeddings/chat) or Ollama (for local models)
+- OpenAI API key (for OpenAI embeddings/chat), Azure OpenAI credentials, or Ollama (for local models)
 - For Ollama setup, see [Ollama Setup Guide](ollama.md)
 
 ### Environment Setup
@@ -56,24 +56,33 @@ Set up environment variables by creating a `.env` file:
 
 ```env
 # Embedding Model Configuration
-EMBEDDING_PROVIDER=openai  # or 'ollama'
+EMBEDDING_PROVIDER=openai  # Options: 'openai', 'azure_openai', 'ollama'
 OPENAI_EMBEDDING_MODEL=text-embedding-ada-002
 OLLAMA_EMBEDDING_MODEL=jina/jina-embeddings-v2-base-en
 OLLAMA_BASE_URL=http://localhost:11434
 
 # Chat Provider Configuration
-# Options: 'openai' or 'ollama'
+# Options: 'openai', 'azure_openai', 'ollama'
+CHAT_PROVIDER=openai
 
-CHAT_PROVIDER=ollama
-
-# Openai Chat Configuration (when CHAT_PROVIDER=openai)
-OPENAI_API_KEY=
+# OpenAI Chat Configuration (when CHAT_PROVIDER=openai)
+OPENAI_API_KEY=your_openai_api_key
 OPENAI_CHAT_MODEL=gpt-4o
 MAX_TOKENS=500
 
+# Azure OpenAI Configuration (when CHAT_PROVIDER=azure_openai or EMBEDDING_PROVIDER=azure_openai)
+AZURE_OPENAI_API_KEY=your_azure_api_key
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_CHAT_MODEL=gpt-4.1-mini
+AZURE_OPENAI_CHAT_DEPLOYMENT=gpt-4.1-mini
+AZURE_OPENAI_CHAT_API_VERSION=2024-12-01-preview
+AZURE_OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-3-small
+AZURE_OPENAI_API_VERSION=2024-02-01
+
 # Ollama Chat Configuration (when CHAT_PROVIDER=ollama)
 OLLAMA_CHAT_MODEL=qwen3:0.6b
-OLLAMA_BASE_URL=http://localhost:1143
+OLLAMA_BASE_URL=http://localhost:11434
 
 # ChromaDB Configuration
 CHROMA_DB_PATH=./chroma_db
@@ -113,6 +122,9 @@ python scripts/init_chroma.py --db-path chroma_db/ --collection-name documents
 # Generate embeddings using OpenAI (default)
 python scripts/generate_embeddings.py --input chunks/ --db-path chroma_db/ --provider openai --model text-embedding-ada-002
 
+# Generate embeddings using Azure OpenAI
+python scripts/generate_embeddings.py --input chunks/ --db-path chroma_db/ --provider azure_openai --model text-embedding-3-small
+
 # Generate embeddings using Ollama
 python scripts/generate_embeddings.py --input chunks/ --db-path chroma_db/ --provider ollama --model jina/jina-embeddings-v2-base-en
 
@@ -126,8 +138,14 @@ python scripts/generate_embeddings.py --input chunks/ --db-path chroma_db/
 # Interactive chat mode with OpenAI
 python scripts/chat_with_docs.py --db-path chroma_db/ --model gpt-4
 
-# Query embeddings directly
-python scripts/query_embeddings.py --query "your question here" --db-path chroma_db/ --model gpt-4 --embedding-provider openai
+# Interactive chat mode with Azure OpenAI
+python scripts/chat_with_docs.py --db-path chroma_db/ --model gpt-4.1-mini
+
+# Query embeddings directly with OpenAI
+python scripts/query_embeddings.py --query "your question here" --db-path chroma_db/ --model gpt-4 --embedding-provider openai --chat-provider openai
+
+# Query embeddings directly with Azure OpenAI
+python scripts/query_embeddings.py --query "your question here" --db-path chroma_db/ --model gpt-4.1-mini --embedding-provider azure_openai --chat-provider azure_openai
 ```
 
 ---
@@ -161,6 +179,12 @@ python scripts/chat_with_docs.py --db-path chroma_db/ --model gpt-4
 - Model: `text-embedding-ada-002`
 - Requires: `OPENAI_API_KEY` environment variable
 - High quality embeddings with API costs
+
+**Azure OpenAI:**
+- Model: `text-embedding-3-small` (configurable)
+- Requires: Azure OpenAI API key and endpoint
+- Enterprise-grade OpenAI models with Azure security and compliance
+- Configure with `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, and deployment settings
 
 **Ollama (Local):**
 - Model: `jina/jina-embeddings-v2-base-en` (configurable)

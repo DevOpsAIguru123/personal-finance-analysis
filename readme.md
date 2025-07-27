@@ -274,7 +274,3 @@ Current version: **0.1.0**
 
 - Python: >= 3.9, < 3.13
 - See `pyproject.toml` for complete dependency list
-
----
-
-Let me know if you need further customization or formatting!

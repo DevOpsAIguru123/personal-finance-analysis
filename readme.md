@@ -40,7 +40,7 @@ The system follows a modular pipeline architecture:
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd docling
+cd personal-finance-analysis
 
 # Install dependencies with uv
 uv sync

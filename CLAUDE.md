@@ -59,10 +59,16 @@ python scripts/chunk_documents.py --input docs_md/ --output chunks/ --chunk-size
 python scripts/chunk_documents.py --input docs_md/ --output chunks/ --chunk-size 500 --overlap 100 --chunk-method recursive
 ```
 
-#### Generate Embeddings with OpenAI and Store in ChromaDB
+#### Generate Embeddings and Store in ChromaDB
 ```bash
-# Generate embeddings for all chunks and store in ChromaDB
-python scripts/generate_embeddings.py --input chunks/ --db-path chroma_db/ --model text-embedding-ada-002
+# Generate embeddings using OpenAI (default)
+python scripts/generate_embeddings.py --input chunks/ --db-path chroma_db/ --provider openai --model text-embedding-ada-002
+
+# Generate embeddings using Ollama
+python scripts/generate_embeddings.py --input chunks/ --db-path chroma_db/ --provider ollama --model jina/jina-embeddings-v2-base-en
+
+# Use environment variables (set EMBEDDING_PROVIDER in .env)
+python scripts/generate_embeddings.py --input chunks/ --db-path chroma_db/
 
 # Initialize ChromaDB collection
 python scripts/init_chroma.py --db-path chroma_db/ --collection-name documents
@@ -70,8 +76,11 @@ python scripts/init_chroma.py --db-path chroma_db/ --collection-name documents
 
 #### Generate Text from Embeddings
 ```bash
-# Query embeddings and generate text
-python scripts/query_embeddings.py --query "your question here" --db-path chroma_db/ --model gpt-4 --max-tokens 500
+# Query embeddings and generate text with OpenAI embeddings
+python scripts/query_embeddings.py --query "your question here" --db-path chroma_db/ --model gpt-4 --embedding-provider openai
+
+# Query embeddings and generate text with Ollama embeddings
+python scripts/query_embeddings.py --query "your question here" --db-path chroma_db/ --model gpt-4 --embedding-provider ollama
 
 # Interactive chat mode
 python scripts/chat_with_docs.py --db-path chroma_db/ --model gpt-4
@@ -141,15 +150,18 @@ Docling is a Python library for document parsing and conversion. The architectur
 
 ### Configuration
 
-#### OpenAI Setup
-```python
-# Environment variables required:
+#### Environment Configuration
+```bash
+# OpenAI API Configuration
 OPENAI_API_KEY=your_api_key
-```
 
-#### ChromaDB Configuration
-```python
-# ChromaDB settings:
+# Embedding Model Configuration
+EMBEDDING_PROVIDER=openai  # or 'ollama'
+OPENAI_EMBEDDING_MODEL=text-embedding-ada-002
+OLLAMA_EMBEDDING_MODEL=jina/jina-embeddings-v2-base-en
+OLLAMA_BASE_URL=http://localhost:11434
+
+# ChromaDB Configuration
 CHROMA_DB_PATH=./chroma_db
 CHROMA_COLLECTION_NAME=documents
 ```

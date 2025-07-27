@@ -19,6 +19,9 @@ from chromadb.config import Settings
 from chromadb.utils import embedding_functions
 from openai import OpenAI
 
+# Import our custom embedding models
+from embedding_models import create_embedding_model
+
 
 class RAGSystem:
     def __init__(
@@ -26,7 +29,8 @@ class RAGSystem:
         db_path: str, 
         collection_name: str = "documents",
         openai_model: str = "gpt-4",
-        api_key: str = None
+        api_key: str = None,
+        embedding_provider: str = None
     ):
         """Initialize the RAG system."""
         self.openai_model = openai_model
@@ -35,22 +39,33 @@ class RAGSystem:
         if not self.client.api_key:
             raise ValueError("OpenAI API key not found. Set OPENAI_API_KEY environment variable.")
         
-        # Initialize ChromaDB with OpenAI embedding function
+        # Get embedding provider from environment if not specified
+        embedding_provider = embedding_provider or os.getenv("EMBEDDING_PROVIDER", "openai")
+        
+        # Initialize ChromaDB
         try:
             self.chroma_client = chromadb.PersistentClient(
                 path=db_path,
                 settings=Settings(anonymized_telemetry=False)
             )
             
-            # Create OpenAI embedding function
-            openai_ef = embedding_functions.OpenAIEmbeddingFunction(
-                api_key=api_key or os.getenv("OPENAI_API_KEY"),
-                model_name="text-embedding-ada-002"
-            )
+            # Create embedding function based on provider
+            if embedding_provider.lower() == "openai":
+                model_name = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-ada-002")
+                embedding_function = embedding_functions.OpenAIEmbeddingFunction(
+                    api_key=api_key or os.getenv("OPENAI_API_KEY"),
+                    model_name=model_name
+                )
+            else:
+                # For Ollama and other providers, create our custom embedding model
+                self.custom_embedding_model = create_embedding_model(
+                    provider=embedding_provider
+                )
+                embedding_function = None
             
             self.collection = self.chroma_client.get_collection(
                 name=collection_name,
-                embedding_function=openai_ef
+                embedding_function=embedding_function
             )
             print(f"✓ Connected to ChromaDB collection: {collection_name}")
         except Exception as e:
@@ -59,10 +74,18 @@ class RAGSystem:
     def retrieve_relevant_docs(self, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
         """Retrieve relevant documents from ChromaDB."""
         try:
-            results = self.collection.query(
-                query_texts=[query],
-                n_results=n_results
-            )
+            # Check if we need to provide query embeddings manually
+            if hasattr(self, 'custom_embedding_model'):
+                query_embedding = self.custom_embedding_model.generate_embedding(query)
+                results = self.collection.query(
+                    query_embeddings=[query_embedding],
+                    n_results=n_results
+                )
+            else:
+                results = self.collection.query(
+                    query_texts=[query],
+                    n_results=n_results
+                )
             
             # Format results
             documents = []
@@ -192,6 +215,7 @@ def main():
     parser.add_argument("--max-tokens", type=int, default=500, help="Maximum tokens for response")
     parser.add_argument("--n-results", type=int, default=5, help="Number of relevant documents to retrieve")
     parser.add_argument("--no-sources", action="store_true", help="Don't show source documents")
+    parser.add_argument("--embedding-provider", choices=["openai", "ollama"], help="Embedding provider (openai or ollama)")
     
     args = parser.parse_args()
     
@@ -205,7 +229,8 @@ def main():
         rag = RAGSystem(
             db_path=args.db_path,
             collection_name=args.collection_name,
-            openai_model=args.model
+            openai_model=args.model,
+            embedding_provider=args.embedding_provider
         )
         
         # Perform query

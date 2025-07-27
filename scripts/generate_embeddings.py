@@ -22,56 +22,38 @@ from chromadb.config import Settings
 from chromadb.utils import embedding_functions
 from openai import OpenAI
 
+# Import our custom embedding models
+from embedding_models import create_embedding_model, EmbeddingModel
+
 
 class EmbeddingGenerator:
-    def __init__(self, model: str = "text-embedding-ada-002", api_key: str = None):
-        """Initialize the embedding generator."""
-        self.model = model
-        self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
-        
-        if not self.client.api_key:
-            raise ValueError("OpenAI API key not found. Set OPENAI_API_KEY environment variable.")
+    def __init__(self, provider: str = None, model: str = None, api_key: str = None, base_url: str = None):
+        """Initialize the embedding generator with configurable provider."""
+        self.embedding_model = create_embedding_model(
+            provider=provider,
+            model=model,
+            api_key=api_key,
+            base_url=base_url
+        )
+        print(f"✓ Initialized embedding model: {self.embedding_model.model_name}")
     
     def generate_embedding(self, text: str) -> List[float]:
         """Generate embedding for a single text."""
-        try:
-            response = self.client.embeddings.create(
-                model=self.model,
-                input=text
-            )
-            return response.data[0].embedding
-        except Exception as e:
-            print(f"Error generating embedding: {str(e)}")
-            return []
+        return self.embedding_model.generate_embedding(text)
     
     def generate_embeddings_batch(self, texts: List[str], batch_size: int = 100) -> List[List[float]]:
         """Generate embeddings for multiple texts in batches."""
-        embeddings = []
-        
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
-            print(f"Processing batch {i//batch_size + 1}/{(len(texts) + batch_size - 1)//batch_size}")
-            
-            try:
-                response = self.client.embeddings.create(
-                    model=self.model,
-                    input=batch
-                )
-                batch_embeddings = [data.embedding for data in response.data]
-                embeddings.extend(batch_embeddings)
-            except Exception as e:
-                print(f"Error processing batch: {str(e)}")
-                # Add empty embeddings for failed batch
-                embeddings.extend([[] for _ in batch])
-        
-        return embeddings
+        return self.embedding_model.generate_embeddings_batch(texts, batch_size)
 
 
 class ChromaDBManager:
-    def __init__(self, db_path: str, collection_name: str = "documents"):
+    def __init__(self, db_path: str, collection_name: str = "documents", provider: str = None):
         """Initialize ChromaDB manager."""
         self.db_path = db_path
         self.collection_name = collection_name
+        
+        # Get provider from environment if not specified
+        provider = provider or os.getenv("EMBEDDING_PROVIDER", "openai")
         
         # Create ChromaDB client
         self.client = chromadb.PersistentClient(
@@ -81,23 +63,28 @@ class ChromaDBManager:
             )
         )
         
-        # Create OpenAI embedding function
-        openai_ef = embedding_functions.OpenAIEmbeddingFunction(
-            api_key=os.getenv("OPENAI_API_KEY"),
-            model_name="text-embedding-ada-002"
-        )
+        # Create embedding function based on provider
+        if provider.lower() == "openai":
+            model_name = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-ada-002")
+            embedding_function = embedding_functions.OpenAIEmbeddingFunction(
+                api_key=os.getenv("OPENAI_API_KEY"),
+                model_name=model_name
+            )
+        else:
+            # For Ollama and other providers, we'll handle embeddings manually
+            embedding_function = None
         
-        # Get or create collection with OpenAI embedding function
+        # Get or create collection
         try:
             self.collection = self.client.get_collection(
                 name=collection_name,
-                embedding_function=openai_ef
+                embedding_function=embedding_function
             )
             print(f"Using existing collection: {collection_name}")
         except:
             self.collection = self.client.create_collection(
                 name=collection_name,
-                embedding_function=openai_ef
+                embedding_function=embedding_function
             )
             print(f"Created new collection: {collection_name}")
     
@@ -163,7 +150,8 @@ def process_chunks_directory(
     input_dir: str, 
     db_path: str, 
     collection_name: str, 
-    model: str
+    provider: str = None,
+    model: str = None
 ) -> None:
     """Process all chunk files in a directory."""
     input_path = Path(input_dir)
@@ -179,11 +167,11 @@ def process_chunks_directory(
         print(f"No chunk files found in {input_dir}")
         return
     
-    print(f"Found {chunk_files} chunk files to process...")
+    print(f"Found {len(chunk_files)} chunk files to process...")
     
     # Initialize embedding generator and ChromaDB
-    embedding_gen = EmbeddingGenerator(model=model)
-    chroma_db = ChromaDBManager(db_path, collection_name)
+    embedding_gen = EmbeddingGenerator(provider=provider, model=model)
+    chroma_db = ChromaDBManager(db_path, collection_name, provider)
     
     total_chunks = 0
     
@@ -220,19 +208,24 @@ def main():
     parser.add_argument("--input", required=True, help="Input directory containing chunk files")
     parser.add_argument("--db-path", required=True, help="ChromaDB database path")
     parser.add_argument("--collection-name", default="documents", help="ChromaDB collection name")
-    parser.add_argument("--model", default="text-embedding-ada-002", help="OpenAI embedding model")
+    parser.add_argument("--provider", choices=["openai", "ollama"], help="Embedding provider (openai or ollama)")
+    parser.add_argument("--model", help="Embedding model name")
     
     args = parser.parse_args()
     
-    # Check if OpenAI API key is set
-    if not os.getenv("OPENAI_API_KEY"):
-        print("Error: OPENAI_API_KEY environment variable not set")
+    # Get provider from args or environment
+    provider = args.provider or os.getenv("EMBEDDING_PROVIDER", "openai")
+    
+    # Check required API keys based on provider
+    if provider == "openai" and not os.getenv("OPENAI_API_KEY"):
+        print("Error: OPENAI_API_KEY environment variable not set for OpenAI provider")
         sys.exit(1)
     
     process_chunks_directory(
         args.input, 
         args.db_path, 
         args.collection_name, 
+        provider,
         args.model
     )
 

@@ -11,6 +11,7 @@ from typing import List, Dict, Any
 
 from dotenv import load_dotenv
 import chromadb
+import requests
 
 # Load environment variables from .env file
 load_dotenv()
@@ -18,41 +19,52 @@ from chromadb.config import Settings
 from chromadb.utils import embedding_functions
 from openai import OpenAI
 
+# Import our custom embedding models
+from embedding_models import create_embedding_model
+
 
 class InteractiveRAG:
     def __init__(
         self, 
         db_path: str, 
-        collection_name: str = "documents",
-        openai_model: str = "gpt-4",
-        api_key: str = None
+        collection_name: str = "documents"
     ):
         """Initialize the interactive RAG system."""
-        self.openai_model = openai_model
-        self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
         self.conversation_history = []
         
-        if not self.client.api_key:
-            raise ValueError("OpenAI API key not found. Set OPENAI_API_KEY environment variable.")
+        # Get configuration from environment variables
+        self.chat_provider = os.getenv("CHAT_PROVIDER", "openai").lower()
+        self.embedding_provider = os.getenv("EMBEDDING_PROVIDER", "openai").lower()
         
-        # Initialize ChromaDB with OpenAI embedding function
+        # Chat model configuration
+        if self.chat_provider == "openai":
+            self.chat_model = os.getenv("OPENAI_CHAT_MODEL", "gpt-4")
+            self.openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            if not self.openai_client.api_key:
+                raise ValueError("OpenAI API key not found. Set OPENAI_API_KEY environment variable.")
+        elif self.chat_provider == "ollama":
+            self.chat_model = os.getenv("OLLAMA_CHAT_MODEL", "phi4-mini")
+            self.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip('/')
+        else:
+            raise ValueError(f"Unsupported chat provider: {self.chat_provider}. Supported: 'openai', 'ollama'")
+        
+        # Initialize ChromaDB
         try:
             self.chroma_client = chromadb.PersistentClient(
                 path=db_path,
                 settings=Settings(anonymized_telemetry=False)
             )
             
-            # Create OpenAI embedding function
-            openai_ef = embedding_functions.OpenAIEmbeddingFunction(
-                api_key=api_key or os.getenv("OPENAI_API_KEY"),
-                model_name="text-embedding-ada-002"
-            )
+            # Create embedding model for queries
+            self.embedding_model = create_embedding_model(provider=self.embedding_provider)
             
+            # Get collection without embedding function (we'll provide embeddings manually)
             self.collection = self.chroma_client.get_collection(
-                name=collection_name,
-                embedding_function=openai_ef
+                name=collection_name
             )
             print(f"✓ Connected to ChromaDB collection: {collection_name}")
+            print(f"🔧 Chat Provider: {self.chat_provider} ({self.chat_model})")
+            print(f"🔧 Embedding Provider: {self.embedding_provider} ({self.embedding_model.model_name})")
             
             # Get collection info
             count = self.collection.count()
@@ -64,8 +76,15 @@ class InteractiveRAG:
     def retrieve_relevant_docs(self, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
         """Retrieve relevant documents from ChromaDB."""
         try:
+            # Generate query embedding using our embedding model
+            query_embedding = self.embedding_model.generate_embedding(query)
+            
+            if not query_embedding:
+                print("❌ Failed to generate query embedding")
+                return []
+            
             results = self.collection.query(
-                query_texts=[query],
+                query_embeddings=[query_embedding],
                 n_results=n_results
             )
             
@@ -110,11 +129,11 @@ class InteractiveRAG:
             for entry in self.conversation_history[-3:]:  # Last 3 exchanges
                 history_text += f"Q: {entry['question']}\nA: {entry['answer']}\n\n"
         
-        # Create prompt
-        system_prompt = """You are a helpful assistant that answers questions based on the provided context documents. 
+        # Create prompt - get system prompt from environment or use default
+        system_prompt = os.getenv("SYSTEM_PROMPT", """You are a helpful assistant that answers questions based on the provided context documents. 
 Use the information from the context to answer questions accurately and comprehensively. 
 If the context doesn't contain enough information to answer the question, say so clearly. 
-You can reference previous conversation when relevant. Be conversational and helpful."""
+You can reference previous conversation when relevant. Be conversational and helpful.""")
         
         user_prompt = f"""Context Documents:
 {context_text}
@@ -124,17 +143,45 @@ Current Question: {query}
 Please provide a helpful answer based on the context documents above."""
         
         try:
-            response = self.client.chat.completions.create(
-                model=self.openai_model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_tokens=max_tokens,
-                temperature=temperature
-            )
-            
-            return response.choices[0].message.content
+            if self.chat_provider == "openai":
+                response = self.openai_client.chat.completions.create(
+                    model=self.chat_model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    max_tokens=max_tokens,
+                    temperature=temperature
+                )
+                return response.choices[0].message.content
+                
+            elif self.chat_provider == "ollama":
+                # Ollama chat completion
+                payload = {
+                    "model": self.chat_model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "stream": False,
+                    "options": {
+                        "temperature": temperature,
+                        "num_predict": max_tokens
+                    }
+                }
+                
+                response = requests.post(
+                    f"{self.ollama_base_url}/api/chat",
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                    timeout=60
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    return result.get("message", {}).get("content", "No response generated")
+                else:
+                    return f"❌ Ollama API error: {response.status_code} - {response.text}"
         
         except Exception as e:
             return f"❌ Error generating response: {str(e)}"
@@ -203,23 +250,22 @@ def main():
     parser = argparse.ArgumentParser(description="Interactive chat with your documents")
     parser.add_argument("--db-path", required=True, help="ChromaDB database path")
     parser.add_argument("--collection-name", default="documents", help="ChromaDB collection name")
-    parser.add_argument("--model", default="gpt-4", help="OpenAI model for text generation")
     parser.add_argument("--max-tokens", type=int, default=500, help="Maximum tokens for response")
     parser.add_argument("--n-results", type=int, default=5, help="Number of relevant documents to retrieve")
     
     args = parser.parse_args()
     
-    # Check if OpenAI API key is set
-    if not os.getenv("OPENAI_API_KEY"):
-        print("❌ Error: OPENAI_API_KEY environment variable not set")
+    # Check configuration based on providers
+    chat_provider = os.getenv("CHAT_PROVIDER", "openai").lower()
+    if chat_provider == "openai" and not os.getenv("OPENAI_API_KEY"):
+        print("❌ Error: OPENAI_API_KEY environment variable not set for OpenAI chat provider")
         sys.exit(1)
     
     try:
         # Initialize RAG system
         rag = InteractiveRAG(
             db_path=args.db_path,
-            collection_name=args.collection_name,
-            openai_model=args.model
+            collection_name=args.collection_name
         )
         
         print_welcome()
@@ -265,7 +311,9 @@ def main():
                     print(f"\n📊 Database Statistics:")
                     print(f"   Collection: {args.collection_name}")
                     print(f"   Documents: {count}")
-                    print(f"   Model: {args.model}")
+                    print(f"   Chat Provider: {rag.chat_provider}")
+                    print(f"   Chat Model: {rag.chat_model}")
+                    print(f"   Embedding Provider: {rag.embedding_provider}")
                     continue
                 
                 elif not question:

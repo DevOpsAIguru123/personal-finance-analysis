@@ -33,6 +33,7 @@ The system follows a modular pipeline architecture:
 
 - Python 3.9+ (< 3.13)
 - OpenAI API key (for OpenAI embeddings/chat) or Ollama (for local models)
+- For Ollama setup, see [Ollama Setup Guide](ollama.md)
 
 ### Environment Setup
 

@@ -51,14 +51,27 @@ pip install langchain langchain-openai openai chromadb
 Set up environment variables by creating a `.env` file:
 
 ```env
-# OpenAI API Configuration
-OPENAI_API_KEY=your_api_key_here
-
 # Embedding Model Configuration
 EMBEDDING_PROVIDER=openai  # or 'ollama'
 OPENAI_EMBEDDING_MODEL=text-embedding-ada-002
 OLLAMA_EMBEDDING_MODEL=jina/jina-embeddings-v2-base-en
 OLLAMA_BASE_URL=http://localhost:11434
+
+# Chat Provider Configuration
+# Options: 'openai' or 'ollama'
+
+
+# OpenAI Chat Configuration (when CHAT_PROVIDER=openai)
+CHAT_PROVIDER=ollama # ollama or openai
+
+# Openai Chat Configuration (when CHAT_PROVIDER=openai)
+OPENAI_API_KEY=
+OPENAI_CHAT_MODEL=gpt-4o
+MAX_TOKENS=500
+
+# Ollama Chat Configuration (when CHAT_PROVIDER=ollama)
+OLLAMA_CHAT_MODEL=qwen3:0.6b
+OLLAMA_BASE_URL=http://localhost:1143
 
 # ChromaDB Configuration
 CHROMA_DB_PATH=./chroma_db

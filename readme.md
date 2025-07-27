@@ -60,9 +60,7 @@ OLLAMA_BASE_URL=http://localhost:11434
 # Chat Provider Configuration
 # Options: 'openai' or 'ollama'
 
-
-# OpenAI Chat Configuration (when CHAT_PROVIDER=openai)
-CHAT_PROVIDER=ollama # ollama or openai
+CHAT_PROVIDER=ollama
 
 # Openai Chat Configuration (when CHAT_PROVIDER=openai)
 OPENAI_API_KEY=
